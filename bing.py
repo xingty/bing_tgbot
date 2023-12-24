@@ -5,7 +5,7 @@ from utils.md2tgmd import escape
 from threading import Thread
 from utils.prompt import build_bing_prompt,parse_result
 from session import Session
-import os,json,asyncio
+import json,asyncio
 from pathlib import Path
 
 style = ConversationStyle.precise
@@ -13,24 +13,15 @@ model = None
 search = False
 
 session = Session('bingai')
-
-def load_json(filename):
-  script_dir = os.path.dirname(os.path.realpath(__file__))
-  cookies_file_path = os.path.join(script_dir, filename)
-
-  if not os.path.exists(cookies_file_path):
-     return None
-
-  with open(cookies_file_path, encoding="utf-8") as f:
-    return json.load(f)
+cookie_file = None
+proxy = None
 
 def ask(message: Message, bot: TeleBot, reply_msg_id):
-	async def execute():
+	async def execute(cookies):
 		try:
-			cookies = load_json("cookies.json")
 			ai = await Chatbot.create(
 				cookies=cookies,
-				proxy='http://127.0.0.1:7890'
+				proxy=proxy
 			)
 
 			print(f'model={model} style={style.name} search={search}')
@@ -38,7 +29,6 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 			uid = str(message.from_user.id)
 			histories = session.get_session(uid)
 			webpage_context = build_bing_prompt(histories,message.text)
-			# print(webpage_context)
 			response = await ai.ask(
 				prompt=message.text,
 				conversation_style=style,
@@ -61,9 +51,6 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 					content = response['item']['result']['message']
 					session.append_message(message,reply,content)
 				
-
-		except FileNotFoundError:
-			return {'code': 500, 'message': 'No cookies file found'},500
 		except Exception as e:
 			print(e)
 			bot.reply_to(message,str(e))
@@ -71,13 +58,17 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 			bot.delete_message(message.chat.id, reply_msg_id)
 			await ai.close()
 
-	asyncio.run(execute())	
+	if cookie_file and cookie_file.exists():
+		cookies = json.loads(cookie_file.read_text())
+		asyncio.run(execute(cookies))	
+		return
+	
+	bot.reply_to(message,"Please set cookies first.")
 
 def handle_message(message: Message, bot: TeleBot):
 	if message.text == '/start':
 		return
 	
-	print(session.context)
 	reply_message: Message = bot.reply_to(
 		message, 
 		"Getting answers... Please wait",
@@ -263,7 +254,7 @@ def do_revoke(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 			bot.delete_message(m['chat_id'], m['message_id'])
 	
 
-def register(bot: TeleBot,options: dict):
+def register(bot: TeleBot):
 	bot.set_my_commands([
 		BotCommand("search","Enable/Disable Search"),
 		BotCommand("style","Change style"),
@@ -303,4 +294,19 @@ def register(bot: TeleBot,options: dict):
 
 		bot.delete_message(call.message.chat.id,call.message.message_id)
 
+
+def init_bot(bot: TeleBot,options: dict):
+	register(bot)
+
+	global cookie_file
+	global proxy
 	
+	if options.cookie_file:
+		cookie_file = Path(options.cookie_file)
+
+	p: str = options.proxy
+	if p and (p.startswith("http") or p.startswith("socks5")):
+		proxy = p
+	
+
+

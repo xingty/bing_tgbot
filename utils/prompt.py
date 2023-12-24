@@ -5,8 +5,9 @@ SYTEM_PROMPT = "You are ChatGPT, a large language model trained by OpenAI.\nLate
 
 def build_bing_prompt(messages,prompt):
 	content = f'[system](#additional_instructions)\n{SYTEM_PROMPT}\n'
-	for m in messages:
-		content += f'[{m["role"]}](#message)\n{m["text"]}\n'
+	if messages and len(messages) > 0:
+		for m in messages:
+			content += f'[{m["role"]}](#message)\n{m["text"]}\n'
 
 	content += f'[user](#message)\n{prompt}\n'
 

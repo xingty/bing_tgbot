@@ -9,7 +9,14 @@ def main():
 	parser.add_argument(
     '--tg_token',
     type=str,
+		required=True,
     help="The token of your telegram bot",
+  )
+	parser.add_argument(
+    '--access_key',
+    type=str,
+		required=True,
+    help="Specify Access Key to use this bot",
   )
 	parser.add_argument(
     '--cookie_file',

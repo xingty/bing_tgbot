@@ -97,3 +97,6 @@ class Session():
 			}
 		])
 
+	def enroll(self,uid: str):
+		self.context[uid] = []
+		self.append_to_disk(uid,[])

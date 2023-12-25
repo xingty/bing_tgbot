@@ -15,6 +15,7 @@ search = False
 session = Session('bingai')
 cookie_file = None
 proxy = None
+key = None
 
 def ask(message: Message, bot: TeleBot, reply_msg_id):
 	async def execute(cookies):
@@ -65,6 +66,17 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 	
 	bot.reply_to(message,"Please set cookies first.")
 
+def permission_check(func):
+	def wrapper(message: Message, bot: TeleBot):
+		uid = str(message.from_user.id)
+		if session.get_session(uid) is not None:
+			func(message,bot)
+		else:
+			bot.reply_to(message,"Please enter a valid key to use the system. You can do this by typing '/key key'.")
+	
+	return wrapper
+
+@permission_check
 def handle_message(message: Message, bot: TeleBot):
 	if message.text == '/start':
 		return
@@ -77,6 +89,7 @@ def handle_message(message: Message, bot: TeleBot):
 	reply_msg_id = reply_message.message_id
 	Thread(target=ask,args=(message,bot,reply_msg_id)).start()
 
+@permission_check
 def handle_search(message: Message, bot: TeleBot):
 	context = f'{message.message_id}:{message.chat.id}'
 	keyboard = [
@@ -105,6 +118,7 @@ def do_search_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int):
 		parse_mode="MarkdownV2"
 	)
 
+@permission_check
 def handle_gpt4_turbo(message: Message, bot: TeleBot):
 	context = f'{message.message_id}:{message.chat.id}'
 	keyboard = [
@@ -133,6 +147,7 @@ def do_model_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int):
 		parse_mode="MarkdownV2"
 	)
 
+@permission_check
 def handle_style(message: Message, bot: TeleBot):
 	keyboard = []
 	context = f'{message.message_id}:{message.chat.id}'
@@ -161,6 +176,7 @@ def do_style_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int):
 		parse_mode="MarkdownV2"
 	)
 
+@permission_check
 def handle_clear(message: Message, bot: TeleBot):
 	context = f'{message.message_id}:{message.chat.id}'
 	keyboard = [
@@ -190,6 +206,7 @@ def do_clear(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 
 	session.clear_context(uid)
 
+@permission_check
 def handle_conversation(message: Message, bot: TeleBot):
 	messages = session.get_session(str(message.from_user.id))
 	if len(messages) == 0:
@@ -207,6 +224,7 @@ def handle_conversation(message: Message, bot: TeleBot):
 		disable_web_page_preview=True
 	)
 
+@permission_check
 def handle_revoke(message: Message, bot: TeleBot):
 	context = f'{message.message_id}:{message.chat.id}'
 	keyboard = [
@@ -253,6 +271,19 @@ def do_revoke(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 		if 'message_id' in m and 'chat_id' in m:	
 			bot.delete_message(m['chat_id'], m['message_id'])
 	
+def handle_key(message: Message, bot: TeleBot):
+	uid = str(message.from_user.id)
+	print(message)
+	print(message.text)
+	if session.get_session(uid) is not None:
+		msg = 'You have already been registered in the system. No need to enter the key again.'
+	elif message.text.replace('/key ','') == key:
+		session.enroll(uid)
+		msg = 'Your registration is successful!'
+	else:
+		msg = 'Invalid key. Please enter a valid key to proceed.'
+
+	bot.reply_to(message, msg)
 
 def register(bot: TeleBot):
 	bot.set_my_commands([
@@ -262,6 +293,7 @@ def register(bot: TeleBot):
 		BotCommand("gpt4_turbo","Enable/Disable GPT4-Turbo"),
 		BotCommand("revoke","Revoke message"),
 		BotCommand("clear","Clear context"),
+		BotCommand("key","Access key"),
 	])
 
 	bot.register_message_handler(handle_gpt4_turbo, pass_bot=True, commands=['gpt4_turbo'])
@@ -270,6 +302,7 @@ def register(bot: TeleBot):
 	bot.register_message_handler(handle_clear, pass_bot=True, commands=['clear'])
 	bot.register_message_handler(handle_conversation, pass_bot=True, commands=['conversation'])
 	bot.register_message_handler(handle_revoke, pass_bot=True, commands=['revoke'])
+	bot.register_message_handler(handle_key, pass_bot=True, commands=['key'])
 	bot.register_message_handler(handle_message, pass_bot=True, content_types=['text'])
 
 	@bot.callback_query_handler(func=lambda call: True)
@@ -300,9 +333,13 @@ def init_bot(bot: TeleBot,options: dict):
 
 	global cookie_file
 	global proxy
+	global key
 	
 	if options.cookie_file:
 		cookie_file = Path(options.cookie_file)
+
+	key = options.access_key
+	print(key)
 
 	p: str = options.proxy
 	if p and (p.startswith("http") or p.startswith("socks5")):

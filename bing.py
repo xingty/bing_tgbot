@@ -355,6 +355,7 @@ def register(bot: TeleBot):
 			do_clear(bot,operation,message_id,chat_id,uid)
 		elif target == 'profile':
 			do_profile_change(bot,operation,message_id,chat_id,uid)
+			return
 
 		bot.delete_message(message.chat.id,message.message_id)
 

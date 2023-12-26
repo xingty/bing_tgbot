@@ -1,10 +1,11 @@
 from utils.md2tgmd import escape
 import json
 
-SYTEM_PROMPT = "You are ChatGPT, a large language model trained by OpenAI.\nLatex inline: $x^2$ \nLatex block: $$e=mc^2$$"
-
-def build_bing_prompt(messages,prompt):
-	content = f'[system](#additional_instructions)\n{SYTEM_PROMPT}\n'
+def build_bing_prompt(messages: [],prompt: str,sytem_prompt: str=''):
+	content = ''
+	if sytem_prompt:
+		content = f'[system](#additional_instructions)\n{sytem_prompt}\n'
+	
 	if messages and len(messages) > 0:
 		for m in messages:
 			content += f'[{m["role"]}](#message)\n{m["text"]}\n'

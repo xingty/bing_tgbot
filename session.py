@@ -1,13 +1,11 @@
 from pathlib import Path
 from telebot.types import Message
-import os
 import json
 
 class Session():
-	def __init__(self, service):
-		self.service = service
+	def __init__(self):
 		self.context = {}
-		self._init_context(service)
+		self._init_context()
 
 	def load_and_filter(self,messages):
 		history = []
@@ -20,7 +18,7 @@ class Session():
 		history.reverse()
 		return history
 
-	def _init_context(self,service):
+	def _init_context(self):
 		self.session_path = Path(__file__).parent.joinpath('sessions')
 		if not self.session_path.exists():
 			self.session_path.mkdir(parents=True, exist_ok=True)

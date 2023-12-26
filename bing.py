@@ -5,14 +5,13 @@ from utils.md2tgmd import escape
 from threading import Thread
 from utils.prompt import build_bing_prompt,parse_result
 from session import Session
+from user_profile import UserProfile
 import json,asyncio
+import traceback
 from pathlib import Path
 
-style = ConversationStyle.precise
-model = None
-search = False
-
-session = Session('bingai')
+session = Session()
+profiles = UserProfile()
 cookie_file = None
 proxy = None
 key = None
@@ -25,18 +24,20 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 				proxy=proxy
 			)
 
-			print(f'model={model} style={style.name} search={search}')
-
 			uid = str(message.from_user.id)
+			profile = profiles.load(uid)
+			search = profile['search']
+			style = ConversationStyle[profile['style']]
+
 			histories = session.get_session(uid)
-			webpage_context = build_bing_prompt(histories,message.text)
+			webpage_context = build_bing_prompt(histories,message.text,profile['prompt'])
 			response = await ai.ask(
 				prompt=message.text,
 				conversation_style=style,
 				webpage_context=webpage_context,
 				search_result=search,
 				no_search=(not search),
-				mode=model,
+				mode=profile.get('model'),
 			)
 
 			if 'item' in response and 'result' in response['item']:
@@ -53,6 +54,7 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 					session.append_message(message,reply,content)
 				
 		except Exception as e:
+			print(traceback.format_exc())
 			print(e)
 			bot.reply_to(message,str(e))
 		finally:
@@ -98,7 +100,10 @@ def handle_search(message: Message, bot: TeleBot):
          	InlineKeyboardButton("disable", callback_data=f'search:off:{context}'),
 		],
     ]
-	
+
+	profile = profiles.load(str(message.from_user.id))
+	search = profile.get('search',False)
+
 	reply_markup = InlineKeyboardMarkup(keyboard)
 	bot.send_message(
 		chat_id=message.chat.id, 
@@ -107,10 +112,10 @@ def handle_search(message: Message, bot: TeleBot):
 		parse_mode="MarkdownV2"
 	)
 
-def do_search_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int):
-	global search
+def do_search_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int, uid: str):
 	search = operation == "on"
 
+	profiles.update(uid,'search',search)
 	bot.send_message(
 		chat_id=chat_id,
 		text=escape(f'Curren status of Search: **{"Enable" if search else "Disable"}**'),
@@ -128,6 +133,9 @@ def handle_gpt4_turbo(message: Message, bot: TeleBot):
 		],
     ]
 
+	profile = profiles.load(str(message.from_user.id))
+	model = profile.get('model',None)
+
 	reply_markup = InlineKeyboardMarkup(keyboard)
 	bot.send_message(
 		chat_id=message.chat.id, 
@@ -136,10 +144,10 @@ def handle_gpt4_turbo(message: Message, bot: TeleBot):
 		parse_mode="MarkdownV2"
 	)
 
-def do_model_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int):
-	global model
+def do_model_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int, uid: str):
 	model = ("gpt4-turbo" if operation == "on" else None)
 
+	profiles.update(uid,'model',model)
 	bot.send_message(
 		chat_id=chat_id,
 		text=escape(f'Curren status of gpt4_turbo: **{"on" if model else "off"}**'),
@@ -156,22 +164,22 @@ def handle_style(message: Message, bot: TeleBot):
 		keyboard.append(InlineKeyboardButton(m, callback_data=callback_data))
 
 	reply_markup = InlineKeyboardMarkup([keyboard])
+	profile = profiles.load(str(message.from_user.id))
+	text = json.dumps(profile,indent=2,ensure_ascii=False)
+	text = f"Current style: {profile['style']}\n```json\n{text}\n```"
+
 	bot.send_message(
 		chat_id=message.chat.id, 
-		text=f"Current style: {style.name}", 
-		reply_markup=reply_markup
+		text=escape(text), 
+		reply_markup=reply_markup,
+		parse_mode="MarkdownV2"
 	)
 
-def do_style_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int):
-	global style
-	if operation in ConversationStyle._member_names_:
-		style = getattr(ConversationStyle, operation)
-	else:
-		style = ConversationStyle.precise
-
+def do_style_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int, uid: str):
+	profiles.update(uid,'style',operation)
 	bot.send_message(
 		chat_id=chat_id,
-		text=escape(f"Current Style has been changed to **{style.name}**"),
+		text=escape(f"Current Style has been changed to **{operation}**"),
 		reply_to_message_id=msg_id,
 		parse_mode="MarkdownV2"
 	)
@@ -273,8 +281,6 @@ def do_revoke(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 	
 def handle_key(message: Message, bot: TeleBot):
 	uid = str(message.from_user.id)
-	print(message)
-	print(message.text)
 	if session.get_session(uid) is not None:
 		msg = 'You have already been registered in the system. No need to enter the key again.'
 	elif message.text.replace('/key ','') == key:
@@ -285,12 +291,33 @@ def handle_key(message: Message, bot: TeleBot):
 
 	bot.reply_to(message, msg)
 
+def handle_profiles(message: Message, bot: TeleBot):
+	context = f'{message.message_id}:{message.chat.id}'
+	keyboard = []
+	for name in profiles.presets.keys():
+		callback_data = f'profile:{name}:{context}'
+		keyboard.append(InlineKeyboardButton(name, callback_data=callback_data))
+	
+	bot.send_message(message.chat.id, 'Presets:', reply_markup=InlineKeyboardMarkup([keyboard]))
+
+def do_profile_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
+	profile = profiles.use(uid,operation)
+	text = json.dumps(profile,indent=2,ensure_ascii=False)
+
+	bot.send_message(
+		chat_id=chat_id,
+		reply_to_message_id=msg_id,
+		parse_mode="MarkdownV2",
+		text=escape(f'```json\n{text}\n```')
+	)
+
 def register(bot: TeleBot):
 	bot.set_my_commands([
 		BotCommand("search","Enable/Disable Search"),
 		BotCommand("style","Change style"),
 		BotCommand("conversation","Get current conversation"),
 		BotCommand("gpt4_turbo","Enable/Disable GPT4-Turbo"),
+		BotCommand("profile","Presets"),
 		BotCommand("revoke","Revoke message"),
 		BotCommand("clear","Clear context"),
 		BotCommand("key","Access key"),
@@ -301,12 +328,14 @@ def register(bot: TeleBot):
 	bot.register_message_handler(handle_search, pass_bot=True, commands=['search'])
 	bot.register_message_handler(handle_clear, pass_bot=True, commands=['clear'])
 	bot.register_message_handler(handle_conversation, pass_bot=True, commands=['conversation'])
+	bot.register_message_handler(handle_profiles, pass_bot=True, commands=['profile'])
 	bot.register_message_handler(handle_revoke, pass_bot=True, commands=['revoke'])
 	bot.register_message_handler(handle_key, pass_bot=True, commands=['key'])
 	bot.register_message_handler(handle_message, pass_bot=True, content_types=['text'])
 
 	@bot.callback_query_handler(func=lambda call: True)
 	def callback_handler(call):
+		message: Message = call.message
 		segments = call.data.split(':')
 		uid = str(call.from_user.id)
 		target = segments[0]
@@ -315,17 +344,19 @@ def register(bot: TeleBot):
 		chat_id = segments[3]
 
 		if target == 'style':
-			do_style_change(bot,operation,message_id,chat_id)
+			do_style_change(bot,operation,message_id,chat_id,uid)
 		elif target == 'revoke':
 			do_revoke(bot,operation,message_id,chat_id,uid)
 		elif target == 'model':
-			do_model_change(bot,operation,message_id,chat_id)
+			do_model_change(bot,operation,message_id,chat_id,uid)
 		elif target == 'search':
-			do_search_change(bot,operation,message_id,chat_id)
+			do_search_change(bot,operation,message_id,chat_id,uid)
 		elif target == 'clear':
 			do_clear(bot,operation,message_id,chat_id,uid)
+		elif target == 'profile':
+			do_profile_change(bot,operation,message_id,chat_id,uid)
 
-		bot.delete_message(call.message.chat.id,call.message.message_id)
+		bot.delete_message(message.chat.id,message.message_id)
 
 
 def init_bot(bot: TeleBot,options: dict):
@@ -339,7 +370,6 @@ def init_bot(bot: TeleBot,options: dict):
 		cookie_file = Path(options.cookie_file)
 
 	key = options.access_key
-	print(key)
 
 	p: str = options.proxy
 	if p and (p.startswith("http") or p.startswith("socks5")):

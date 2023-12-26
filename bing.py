@@ -234,6 +234,12 @@ def handle_conversation(message: Message, bot: TeleBot):
 
 @permission_check
 def handle_revoke(message: Message, bot: TeleBot):
+	uid = str(message.from_user.id)
+	messages = session.get_session(uid)
+	if (len(messages) == 0):
+		bot.reply_to(message,"No conversation found.")
+		return
+
 	context = f'{message.message_id}:{message.chat.id}'
 	keyboard = [
         [
@@ -242,7 +248,19 @@ def handle_revoke(message: Message, bot: TeleBot):
 		],
     ]
 
-	bot.send_message(message.chat.id, 'Are you sure?', reply_markup=InlineKeyboardMarkup(keyboard))
+	revoke_list = [messages[-2],messages[-1]]
+	content = ''
+	for m in revoke_list:
+		content += f'### {m["role"]}\n{m["text"]}\n\n'
+	
+	content = f'Are you sure? This operation will revoke the messages below:\n\n{content}'
+
+	bot.send_message(
+		chat_id=message.chat.id, 
+		text=escape(content), 
+		parse_mode="MarkdownV2",
+		reply_markup=InlineKeyboardMarkup(keyboard)
+	)
 
 def do_revoke(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 	if operation != 'yes':

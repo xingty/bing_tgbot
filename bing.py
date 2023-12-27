@@ -2,6 +2,7 @@ from EdgeGPT.EdgeGPT import Chatbot,ConversationStyle
 from telebot import TeleBot
 from telebot.types import Message,BotCommand,InlineKeyboardButton,InlineKeyboardMarkup
 from utils.md2tgmd import escape
+from utils.text import messages_to_segments
 from threading import Thread
 from utils.prompt import build_bing_prompt,parse_result
 from session import Session
@@ -221,16 +222,17 @@ def handle_conversation(message: Message, bot: TeleBot):
 		bot.reply_to(message,"No conversation found.")
 		return
 
-	content = ''
-	for m in messages:
-		content += f'### {m["role"]}\n{m["text"]}\n\n'
-	
-	bot.reply_to(
-		message=message,
-		text=escape(content),
-		parse_mode="MarkdownV2",
-		disable_web_page_preview=True
-	)
+	segments = messages_to_segments(messages)
+	last_message_id = message.message_id
+	for content in segments:
+		reply_msg: Message = bot.send_message(
+			chat_id=message.chat.id,
+			text=escape(content),
+			parse_mode="MarkdownV2",
+			disable_web_page_preview=True,
+			reply_to_message_id=last_message_id
+		)
+		last_message_id = reply_msg.message_id
 
 @permission_check
 def handle_revoke(message: Message, bot: TeleBot):
@@ -353,6 +355,7 @@ def register(bot: TeleBot):
 
 	@bot.callback_query_handler(func=lambda call: True)
 	def callback_handler(call):
+		print(call)
 		message: Message = call.message
 		segments = call.data.split(':')
 		uid = str(call.from_user.id)

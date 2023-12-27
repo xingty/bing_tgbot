@@ -94,7 +94,7 @@ def handle_message(message: Message, bot: TeleBot):
 
 @permission_check
 def handle_search(message: Message, bot: TeleBot):
-	context = f'{message.message_id}:{message.chat.id}'
+	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	keyboard = [
         [
 			InlineKeyboardButton("Enable", callback_data=f'search:on:{context}'),
@@ -126,7 +126,7 @@ def do_search_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int, uid:
 
 @permission_check
 def handle_gpt4_turbo(message: Message, bot: TeleBot):
-	context = f'{message.message_id}:{message.chat.id}'
+	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	keyboard = [
         [
 			InlineKeyboardButton("On", callback_data=f'model:on:{context}'),
@@ -159,7 +159,7 @@ def do_model_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int, uid: 
 @permission_check
 def handle_style(message: Message, bot: TeleBot):
 	keyboard = []
-	context = f'{message.message_id}:{message.chat.id}'
+	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	for m in ConversationStyle._member_names_:
 		callback_data = f'style:{m}:{context}'
 		keyboard.append(InlineKeyboardButton(m, callback_data=callback_data))
@@ -187,7 +187,7 @@ def do_style_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int, uid: 
 
 @permission_check
 def handle_clear(message: Message, bot: TeleBot):
-	context = f'{message.message_id}:{message.chat.id}'
+	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	keyboard = [
         [
 			InlineKeyboardButton("Yes", callback_data=f'clear:yes:{context}'),
@@ -221,7 +221,8 @@ def handle_conversation(message: Message, bot: TeleBot):
 	if len(messages) == 0:
 		bot.reply_to(message,"No conversation found.")
 		return
-
+	
+	messages = [msg for msg in messages if msg['chat_id'] == message.chat.id]
 	segments = messages_to_segments(messages)
 	last_message_id = message.message_id
 	for content in segments:
@@ -242,7 +243,7 @@ def handle_revoke(message: Message, bot: TeleBot):
 		bot.reply_to(message,"No conversation found.")
 		return
 
-	context = f'{message.message_id}:{message.chat.id}'
+	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	keyboard = [
         [
 			InlineKeyboardButton("Yes", callback_data=f'revoke:yes:{context}'),
@@ -312,7 +313,7 @@ def handle_key(message: Message, bot: TeleBot):
 	bot.reply_to(message, msg)
 
 def handle_profiles(message: Message, bot: TeleBot):
-	context = f'{message.message_id}:{message.chat.id}'
+	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	keyboard = []
 	for name in profiles.presets.keys():
 		callback_data = f'profile:{name}:{context}'
@@ -355,7 +356,6 @@ def register(bot: TeleBot):
 
 	@bot.callback_query_handler(func=lambda call: True)
 	def callback_handler(call):
-		print(call)
 		message: Message = call.message
 		segments = call.data.split(':')
 		uid = str(call.from_user.id)
@@ -363,6 +363,10 @@ def register(bot: TeleBot):
 		operation = segments[1]
 		message_id = segments[2]
 		chat_id = segments[3]
+		source_uid = int(segments[4])
+
+		if call.from_user.id != source_uid:
+			return
 
 		if target == 'style':
 			do_style_change(bot,operation,message_id,chat_id,uid)

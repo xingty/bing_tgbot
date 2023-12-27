@@ -46,13 +46,15 @@ class Session():
 				"role": 'user',
 				"text": user_msg.text,
 				"message_id": user_msg.message_id,
-				"chat_id": user_msg.chat.id
+				"chat_id": user_msg.chat.id,
+				"ts": user_msg.date
 			},
 			{
 				"role": 'assistant',
 				"text": content,
 				"message_id": assistant_msg.message_id,
-				"chat_id": assistant_msg.chat.id
+				"chat_id": assistant_msg.chat.id,
+				"ts": assistant_msg.date
 			}
 		]
 

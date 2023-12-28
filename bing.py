@@ -2,7 +2,7 @@ from EdgeGPT.EdgeGPT import Chatbot,ConversationStyle
 from telebot import TeleBot
 from telebot.types import Message,BotCommand,InlineKeyboardButton,InlineKeyboardMarkup
 from utils.md2tgmd import escape
-from utils.text import messages_to_segments
+from utils.text import messages_to_segments,split_to_segments
 from threading import Thread
 from utils.prompt import build_bing_prompt,parse_result
 from session import Session
@@ -44,15 +44,34 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 			if 'item' in response and 'result' in response['item']:
 				result = response['item']['result']
 				if result and "success" == (result['value']+'').lower():
-					reply = bot.reply_to(
-						message,
-						parse_result(response['item'],search=True),
-						parse_mode="MarkdownV2",
-						disable_web_page_preview=True
-					)
-
 					content = response['item']['result']['message']
-					session.append_message(message,reply,content)
+
+					search_result = parse_result(response['item'],search)
+					last_message_id = message.message_id
+					replies: list = []
+					segments = split_to_segments(content, search_result)
+					is_seg = False
+					
+					for seg in segments:
+						reply = bot.send_message(
+							chat_id=message.chat.id,
+							text=escape(seg),
+							reply_to_message_id=last_message_id,
+							parse_mode="MarkdownV2",
+							disable_web_page_preview=True
+						)
+						replies.append({
+							'role': 'assistant',
+							'text': seg,
+							'message_id': reply.message_id,
+							'chat_id': message.chat.id,
+							'ts': reply.date,
+							'is_seg': is_seg
+						})
+						is_seg = True
+						last_message_id = reply.message_id
+					
+					session.append_message(message,replies)
 				
 		except Exception as e:
 			print(traceback.format_exc())

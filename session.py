@@ -35,7 +35,7 @@ class Session():
 			if file_extension == 'json':
 				self.context[uid] = self.load_and_filter(json.loads(item.read_text()))
 
-	def append_message(self,user_msg: Message, assistant_msg: Message, content: str):
+	def append_message(self,user_msg: Message, replies: list):
 		uid = str(user_msg.from_user.id)
 		if uid not in self.context:
 			self.context[uid] = []
@@ -47,16 +47,11 @@ class Session():
 				"text": user_msg.text,
 				"message_id": user_msg.message_id,
 				"chat_id": user_msg.chat.id,
-				"ts": user_msg.date
-			},
-			{
-				"role": 'assistant',
-				"text": content,
-				"message_id": assistant_msg.message_id,
-				"chat_id": assistant_msg.chat.id,
-				"ts": assistant_msg.date
+				"ts": user_msg.date,
 			}
 		]
+
+		messages += replies
 
 		conversation += messages
 		self.append_to_disk(uid,messages)

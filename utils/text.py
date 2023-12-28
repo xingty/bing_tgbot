@@ -23,3 +23,15 @@ def messages_to_segments(messages: list):
 	segments.append(segment)
 
 	return segments
+
+def split_by_length(text: str, length: int=MAX_TEXT_LENGTH):
+	return [text[i:i+length] for i in range(0, len(text), length)]
+
+def split_to_segments(text: str, search_result: str, length: int=MAX_TEXT_LENGTH):
+	segments = split_by_length(text, length)
+	if (len(segments[-1]) + len(search_result)) > length:
+		segments.append(search_result)
+	else:
+		segments[-1] = segments[-1] + '\n\n' + search_result
+	
+	return segments

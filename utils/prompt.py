@@ -4,19 +4,24 @@ import json
 def build_bing_prompt(messages: [],prompt: str,sytem_prompt: str=''):
 	content = ''
 	if sytem_prompt:
-		content = f'[system](#additional_instructions)\n{sytem_prompt}\n'
+		content = f'[system](#additional_instructions)\n{sytem_prompt}'
 	
 	if messages and len(messages) > 0:
 		for m in messages:
-			content += f'[{m["role"]}](#message)\n{m["text"]}\n'
+			text = f'{m["text"]}'
+			if not m.get("is_seg"):
+				text = f'\n[{m["role"]}](#message)\n{text}'
+				
+			content += text
 
-	content += f'[user](#message)\n{prompt}\n'
+	content += f'\n[user](#message)\n{prompt}'
 
 	return content
 
 def parse_result(item,search=False):
-	content = item['result']['message']
-
+	if not search:
+		return ''
+	
 	def parse_search_result(message):
 		if 'Web search returned no relevant result' in message['hiddenText']:
 			return [{
@@ -43,12 +48,13 @@ def parse_result(item,search=False):
 			
 			search_result += parse_search_result(m)
 
+	content = ''
 	if len(search_result) > 0:
 		index = 1
-		content += f'\n\n**Reference:**\n'
+		content = f'\n\n**Reference:**\n'
 		for item in search_result:
 			content += f'- [^{index}^] [{item["title"]}]({item["url"]})\n'
 			index += 1
 
-	return escape(content)
+	return content
 

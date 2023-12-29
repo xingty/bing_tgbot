@@ -64,6 +64,9 @@ class UserProfile:
 	
 	def use(self,uid: str,profile_name: str):
 		profile = self.presets.get(profile_name) or DEFAULT_PROFILE.copy()
+		old = self.maps.get(uid) or {}
+		profile['model'] = old.get('model')
+
 		self.update_all(uid,profile)
 
 		return profile

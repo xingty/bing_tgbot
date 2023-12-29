@@ -31,7 +31,7 @@ def split_to_segments(text: str, search_result: str, length: int=MAX_TEXT_LENGTH
 	segments = split_by_length(text, length)
 	if (len(segments[-1]) + len(search_result)) > length:
 		segments.append(search_result)
-	else:
+	elif search_result:
 		segments[-1] = segments[-1] + '\n\n' + search_result
 	
 	return segments

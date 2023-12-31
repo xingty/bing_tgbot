@@ -334,11 +334,18 @@ def handle_key(message: Message, bot: TeleBot):
 def handle_profiles(message: Message, bot: TeleBot):
 	context = f'{message.message_id}:{message.chat.id}:{message.from_user.id}'
 	keyboard = []
+	items = []
 	for name in profiles.presets.keys():
 		callback_data = f'profile:{name}:{context}'
-		keyboard.append(InlineKeyboardButton(name, callback_data=callback_data))
+		if len(items) == 3:
+			keyboard.append(items)
+			items = []
+		items.append(InlineKeyboardButton(name, callback_data=callback_data))
 	
-	bot.send_message(message.chat.id, 'Presets:', reply_markup=InlineKeyboardMarkup([keyboard]))
+	if len(items) > 0:
+		keyboard.append(items)
+	
+	bot.send_message(message.chat.id, 'Presets:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 def do_profile_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 	profile = profiles.use(uid,operation)

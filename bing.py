@@ -79,7 +79,8 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 			bot.reply_to(message,str(e))
 		finally:
 			bot.delete_message(message.chat.id, reply_msg_id)
-			await ai.close()
+			if ai is not None:
+				await ai.close()
 
 	if cookie_file and cookie_file.exists():
 		cookies = json.loads(cookie_file.read_text())

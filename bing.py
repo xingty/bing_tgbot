@@ -19,6 +19,7 @@ key = None
 
 def ask(message: Message, bot: TeleBot, reply_msg_id):
 	async def execute(cookies):
+		ai = None
 		try:
 			ai = await Chatbot.create(
 				cookies=cookies,

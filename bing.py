@@ -348,6 +348,7 @@ def handle_profiles(message: Message, bot: TeleBot):
 		keyboard.append(items)
 	
 	bot.send_message(message.chat.id, 'Presets:', reply_markup=InlineKeyboardMarkup(keyboard))
+	bot.delete_message(message.chat.id, message.message_id)
 
 def do_profile_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 	profile = profiles.use(uid,operation)

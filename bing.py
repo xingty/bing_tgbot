@@ -4,11 +4,11 @@ from telebot.types import Message,BotCommand,InlineKeyboardButton,InlineKeyboard
 from utils.md2tgmd import escape
 from utils.text import messages_to_segments,split_to_segments
 from threading import Thread
-from utils.prompt import build_bing_prompt,parse_result
+from utils.prompt import build_bing_prompt,parse_search_result
 from session import Session
 from user_profile import UserProfile
 import json,asyncio
-import traceback
+import traceback,time
 from pathlib import Path
 
 session = Session()
@@ -17,78 +17,172 @@ cookie_file = None
 proxy = None
 key = None
 
+# def ask(message: Message, bot: TeleBot, reply_msg_id):
+# 	async def execute(cookies):
+# 		ai = None
+# 		try:
+# 			ai = await Chatbot.create(
+# 				cookies=cookies,
+# 				proxy=proxy
+# 			)
+
+# 			uid = str(message.from_user.id)
+# 			profile = profiles.load(uid)
+# 			search = profile['search']
+# 			style = ConversationStyle[profile['style']]
+
+# 			histories = session.get_session(uid)
+# 			webpage_context = build_bing_prompt(histories,message.text,profile['prompt'])
+# 			response = await ai.ask(
+# 				prompt=message.text,
+# 				conversation_style=style,
+# 				webpage_context=webpage_context,
+# 				search_result=search,
+# 				no_search=(not search),
+# 				mode=profile.get('model'),
+# 			)
+
+# 			if 'item' in response and 'result' in response['item']:
+# 				result = response['item']['result']
+# 				if result and "success" == (result['value']+'').lower():
+# 					content = response['item']['result']['message']
+
+# 					search_result = parse_result(response['item'],search)
+# 					last_message_id = message.message_id
+# 					replies: list = []
+# 					segments = split_to_segments(content, search_result)
+# 					is_seg = False
+					
+# 					for seg in segments:
+# 						reply = bot.send_message(
+# 							chat_id=message.chat.id,
+# 							text=escape(seg),
+# 							reply_to_message_id=last_message_id,
+# 							parse_mode="MarkdownV2",
+# 							disable_web_page_preview=True
+# 						)
+# 						replies.append({
+# 							'role': 'assistant',
+# 							'text': seg,
+# 							'message_id': reply.message_id,
+# 							'chat_id': message.chat.id,
+# 							'ts': reply.date,
+# 							'is_seg': is_seg
+# 						})
+# 						is_seg = True
+# 						last_message_id = reply.message_id
+					
+# 					session.append_message(message,replies)
+				
+# 		except Exception as e:
+# 			print(traceback.format_exc())
+# 			print(e)
+# 			bot.reply_to(message,str(e))
+# 		finally:
+# 			bot.delete_message(message.chat.id, reply_msg_id)
+# 			if ai is not None:
+# 				await ai.close()
+
+# 	if cookie_file and cookie_file.exists():
+# 		cookies = json.loads(cookie_file.read_text())
+# 		asyncio.run(execute(cookies))	
+# 		return
+	
+# 	bot.reply_to(message,"Please set cookies first.")
+
 def ask(message: Message, bot: TeleBot, reply_msg_id):
-	async def execute(cookies):
-		ai = None
+	async def execute(msg: Message, bot: TeleBot, reply_msg_id):
+		uid = str(msg.from_user.id)
+		profile = profiles.load(uid)
+		search = profile['search']
+		style = ConversationStyle[profile['style']]
+		search_result = []
+		offset = 0
+		content = ''
 		try:
+			cookies = json.loads(cookie_file.read_text())
 			ai = await Chatbot.create(
 				cookies=cookies,
 				proxy=proxy
 			)
 
-			uid = str(message.from_user.id)
-			profile = profiles.load(uid)
-			search = profile['search']
-			style = ConversationStyle[profile['style']]
-
 			histories = session.get_session(uid)
-			webpage_context = build_bing_prompt(histories,message.text,profile['prompt'])
-			response = await ai.ask(
-				prompt=message.text,
+			webpage_context = build_bing_prompt(histories,msg.text,profile['prompt'])
+
+			async for final,response in ai.ask_stream (
+				prompt=msg.text,
 				conversation_style=style,
-				webpage_context=webpage_context,
 				search_result=search,
+				raw=True,
+				webpage_context=webpage_context,
 				no_search=(not search),
 				mode=profile.get('model'),
-			)
-
-			if 'item' in response and 'result' in response['item']:
-				result = response['item']['result']
-				if result and "success" == (result['value']+'').lower():
-					content = response['item']['result']['message']
-
-					search_result = parse_result(response['item'],search)
-					last_message_id = message.message_id
-					replies: list = []
-					segments = split_to_segments(content, search_result)
-					is_seg = False
+			):
+				type = response["type"]
+				if type == 1 and "messages" in response["arguments"][0]:
+					message = response["arguments"][0]["messages"][0]
+					msg_type = message.get("messageType")
 					
-					for seg in segments:
-						reply = bot.send_message(
-							chat_id=message.chat.id,
-							text=escape(seg),
-							reply_to_message_id=last_message_id,
-							parse_mode="MarkdownV2",
-							disable_web_page_preview=True
-						)
-						replies.append({
-							'role': 'assistant',
-							'text': seg,
-							'message_id': reply.message_id,
-							'chat_id': message.chat.id,
-							'ts': reply.date,
-							'is_seg': is_seg
-						})
-						is_seg = True
-						last_message_id = reply.message_id
-					
-					session.append_message(message,replies)
-				
+					if msg_type == "InternalSearchResult":
+						search_result = search_result + parse_search_result(message)
+					elif msg_type is None:
+						content = message["text"]
+						if message.get("contentOrigin") == "Apology":
+							print('message has been revoked')
+							print(message)
+							content = f"{message.get('text')} -end- (message has been revoked)"
+
+						total = len(content)
+						if total - offset >= 15 and total < 4096:
+							bot.edit_message_text(
+								text=escape(content),
+								chat_id=msg.chat.id,
+								message_id=reply_msg_id,
+								parse_mode="MarkdownV2",
+							)
+							offset = total
+					else:
+						print(f'Ignoring message type: {msg_type}')
 		except Exception as e:
-			print(traceback.format_exc())
-			print(e)
-			bot.reply_to(message,str(e))
-		finally:
-			bot.delete_message(message.chat.id, reply_msg_id)
-			if ai is not None:
+				print(e)
+				bot.edit_message_text(
+					text=escape(f'{content}\n\n{str(e)}'),
+					chat_id=msg.chat.id,
+					message_id=reply_msg_id,
+					parse_mode="MarkdownV2",
+				)
 				await ai.close()
+				return
 
-	if cookie_file and cookie_file.exists():
-		cookies = json.loads(cookie_file.read_text())
-		asyncio.run(execute(cookies))	
-		return
-	
-	bot.reply_to(message,"Please set cookies first.")
+		if len(search_result) > 0:
+			content += '\n\n'
+			index = 1
+			for item in search_result:
+				content += f'- [^{index}^] [{item["title"]}]({item["url"]})\n'
+				index += 1
+
+		truncated = escape(content)
+		if len(truncated) > 4096:
+			truncated = truncated[:4095]
+		bot.edit_message_text(
+			text=truncated,
+			chat_id=msg.chat.id,
+			message_id=reply_msg_id,
+			parse_mode="MarkdownV2",
+			disable_web_page_preview=True
+		)
+
+		session.append_message(msg,[{
+			'role': 'assistant',
+			'text': content,
+			'message_id': reply_msg_id,
+			'chat_id': msg.chat.id,
+			'ts': int(time.time()),
+		}])
+
+		await ai.close()
+
+	asyncio.run(execute(message,bot,reply_msg_id))
 
 def permission_check(func):
 	def wrapper(message: Message, bot: TeleBot):
@@ -107,7 +201,7 @@ def handle_message(message: Message, bot: TeleBot):
 	
 	reply_message: Message = bot.reply_to(
 		message, 
-		"Getting answers... Please wait",
+		"Processing...",
 	)
 
 	reply_msg_id = reply_message.message_id
@@ -348,7 +442,6 @@ def handle_profiles(message: Message, bot: TeleBot):
 		keyboard.append(items)
 	
 	bot.send_message(message.chat.id, 'Presets:', reply_markup=InlineKeyboardMarkup(keyboard))
-	bot.delete_message(message.chat.id, message.message_id)
 
 def do_profile_change(bot: TeleBot,operation: str,msg_id: int, chat_id: int,uid: str):
 	profile = profiles.use(uid,operation)

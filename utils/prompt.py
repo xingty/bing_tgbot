@@ -58,3 +58,21 @@ def parse_result(item,search=False):
 
 	return content
 
+
+def parse_search_result(message):
+	if 'Web search returned no relevant result' in message['hiddenText']:
+		return [{
+				'title': 'No relevant result',
+				'url': None,
+				'snippet': message['hiddenText']
+		}]
+	
+	data = []
+	for group in json.loads(message['text']).values():
+		for item in group:
+			data.append({
+				'title': item['title'],
+				'url': item['url'],
+			})
+
+	return data

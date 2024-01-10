@@ -214,3 +214,4 @@ ENV/
 cookies.json
 sessions/
 logs/*
+test/*

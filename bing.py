@@ -7,9 +7,10 @@ from threading import Thread
 from utils.prompt import build_bing_prompt,parse_search_result
 from session import Session
 from user_profile import UserProfile
-import json,asyncio
-import traceback,time
 from pathlib import Path
+import json,asyncio
+import time
+import math
 
 session = Session()
 profiles = UserProfile()
@@ -99,6 +100,7 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 		search_result = []
 		offset = 0
 		content = ''
+		buffer_size = 15
 		try:
 			cookies = json.loads(cookie_file.read_text())
 			ai = await Chatbot.create(
@@ -133,13 +135,15 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 							content = f"{message.get('text')} -end- (message has been revoked)"
 
 						total = len(content)
-						if total - offset >= 15 and total < 4096:
+						if total - offset >= buffer_size and total < 4096:
 							bot.edit_message_text(
 								text=escape(content),
 								chat_id=msg.chat.id,
 								message_id=reply_msg_id,
 								parse_mode="MarkdownV2",
 							)
+							buffer_size = int(math.log10(total) * 15)
+							print('buffer_size:' + str(buffer_size))
 							offset = total
 					else:
 						print(f'Ignoring message type: {msg_type}')
@@ -474,7 +478,7 @@ def register(bot: TeleBot):
 	bot.register_message_handler(handle_profiles, pass_bot=True, commands=['profile'])
 	bot.register_message_handler(handle_revoke, pass_bot=True, commands=['revoke'])
 	bot.register_message_handler(handle_key, pass_bot=True, commands=['key'])
-	bot.register_message_handler(handle_message, pass_bot=True, content_types=['text'])
+	bot.register_message_handler(handle_message, pass_bot=True, content_types=["text"])
 
 	@bot.callback_query_handler(func=lambda call: True)
 	def callback_handler(call):

@@ -70,8 +70,10 @@ class Session():
 
 		file.write_text(json.dumps(history,ensure_ascii=False))
 
-	def get_session(self,uid: str):
-		return self.context.get(uid)
+	def get_session(self,uid: str, fetch: int = -1):
+		histories = self.context.get(uid)
+		
+		return histories if (fetch == -1 or len(histories) <= fetch) else histories[-fetch:]
 
 	def remove_and_save(self, uid: str, messages_ids: list):
 		file,history = self.get_messages(uid)

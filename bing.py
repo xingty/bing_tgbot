@@ -95,12 +95,15 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 	async def execute(msg: Message, bot: TeleBot, reply_msg_id):
 		uid = str(msg.from_user.id)
 		profile = profiles.load(uid)
-		search = profile['search']
+		search = profile.get('search',False)
+		memory = profile.get('memory',-1)
 		style = ConversationStyle[profile['style']]
 		search_result = []
 		offset = 0
 		content = ''
 		buffer_size = 15
+		
+
 		try:
 			cookies = json.loads(cookie_file.read_text())
 			ai = await Chatbot.create(
@@ -108,7 +111,7 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 				proxy=proxy
 			)
 
-			histories = session.get_session(uid)
+			histories = session.get_session(uid=uid,fetch=memory)
 			webpage_context = build_bing_prompt(histories,msg.text,profile['prompt'])
 
 			async for final,response in ai.ask_stream (

@@ -16,6 +16,7 @@ session = Session()
 profiles = UserProfile()
 cookie_file = None
 proxy = None
+locale = "en-US"
 key = None
 
 # def ask(message: Message, bot: TeleBot, reply_msg_id):
@@ -122,6 +123,7 @@ def ask(message: Message, bot: TeleBot, reply_msg_id):
 				webpage_context=webpage_context,
 				no_search=(not search),
 				mode=profile.get('model'),
+				locale=locale,
 			):
 				type = response["type"]
 				if type == 1 and "messages" in response["arguments"][0]:
@@ -520,9 +522,13 @@ def init_bot(bot: TeleBot,options: dict):
 	global cookie_file
 	global proxy
 	global key
+	global locale
 	
 	if options.cookie_file:
 		cookie_file = Path(options.cookie_file)
+
+	if options.locale:
+		locale = options.locale
 
 	key = options.access_key
 

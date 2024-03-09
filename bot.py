@@ -30,6 +30,12 @@ def main():
 		required=False,
     help="proxy server, e.g. http://127.0.0.1:7890",
   )
+	parser.add_argument(
+    '--locale',
+    type=str,
+		required=False,
+    help="the locale of the proxy server, e.g. en-US",
+  )
 	options = parser.parse_args()
 	print(options)
 
